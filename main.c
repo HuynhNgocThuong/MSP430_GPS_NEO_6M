@@ -1,13 +1,15 @@
 #include "msp430g2553.h"
 #include "LCD_NOKIA_5110.h"
-
+#include "stdlib.h"
+#include "string.h"
 /*******************************************************************************\
 *	                       DEFINE,BIEN TOAN CUC     		 	*
 \*******************************************************************************/
-#define GPS_BUFFER_SIZE 340
+#define GPS_BUFFER_SIZE 250
 char  GPS_RX_byte[2], GPS_RX_Buffer[GPS_BUFFER_SIZE], GPS_Transfer_cplt = 0;  //Bien du lieu module GPS
 char time[20], status[2], latitude[10], S_N[2], longitude[11], E_W[2], speed[20], dir[20], date[20]; //Du lieu trong chuoi nhan duoc
 unsigned char GPS_ans_stt, GPS_send_error=0, GPS_receive_error=0; //Bien trang thai module GPS, bien trang thai error
+float a, b;
 
 /*******************************************************************************\
 *	                       PROTOTYPE    		 	                *
@@ -63,6 +65,18 @@ void serialWrite_Int(unsigned long n){
 /*******************************************************************************\
 *	                      GPS		                         	*
 \*******************************************************************************/
+int Search_Char(unsigned char Char, char *Str, unsigned char Time, int Len)
+{
+    int   i=0;
+    int  j=0;
+    while((j<Time)&&(i<=Len))
+    {
+        if(Str[i] == Char)    j++;  
+        i++;  
+    }
+    return (i-1);
+}
+
 
 // Ham xoa buffer GPS
 void CLEAR_GPS_RX_Buffer() 
@@ -87,41 +101,46 @@ int GPS_GetGPRMC()
 	return k;
 }
 
-// Ham lay gia tri tu Module GPS
- unsigned char GPS_DeviceInfo(char* time, char* status, char* latitude, char* S_N, char* longitude, char* E_W, char* speed, char* dir, char* date)
+unsigned char GPS_DeviceInfo(char* time, char* status, char* latitude, char* S_N, char* longitude, char* E_W, char* speed, char* dir, char* date)
 {
-	int index = 0, 
-	    i = 0;
-	// unsigned char temp[120];
-	
-	index = GPS_GetGPRMC(); 
-	i = index;
-	if(index > (GPS_BUFFER_SIZE-100)) return 0;
-
-	for (i=0;i<10;i++)   
-	{
-		if(GPS_RX_Buffer[i+20] == ',')
-		{
-			*latitude = 0;
-			break;
-		}
-		*latitude=GPS_RX_Buffer[i+20]; 
-		latitude++;
-			
-	}
-	
-	for (i=0;i<11;i++)
-  { 
-		if(GPS_RX_Buffer[i+33] == ',')
-		{
-			*longitude = 0;
-			break;
-		}
-		*longitude=GPS_RX_Buffer[i+33];
-		longitude++;
-	}
-  return 1;	
+        int i = 0;
+	int k = 0;
+	int Temp1, Temp2;
+	Temp1 = Search_Char(',',GPS_RX_Buffer,2,GPS_BUFFER_SIZE);	//Tim vi tri co ',' lan 2
+	//printf("%d\n",Temp1);
+	if(GPS_RX_Buffer[Temp1+1] == 'V'){
+		return 0;
 }
+	else{
+          //Lay vi do:
+		Temp1 = Search_Char(',',GPS_RX_Buffer,3,GPS_BUFFER_SIZE);	 //Tim vi tri co ',' lan 3
+		//printf("%d\n",Temp1);
+		Temp2 = Search_Char(',',GPS_RX_Buffer,4,GPS_BUFFER_SIZE);	//Tim vi tri co ',' lan 4
+		//printf("%d\n",Temp2);
+		//Tach chuoi vi do
+		k = 0;
+		for(i = Temp1+1; i < Temp2; i++){
+			latitude[k] = GPS_RX_Buffer[i];
+			k++;	
+		}
+                latitude[i] = 0;
+		a = atof(latitude);
+          //Lay kinh do:
+		Temp1 = Search_Char(',',GPS_RX_Buffer,5,GPS_BUFFER_SIZE);	 //Tim vi tri co ',' lan 5
+		//printf("%d\n",Temp1);
+		Temp2 = Search_Char(',',GPS_RX_Buffer,6,GPS_BUFFER_SIZE);	//Tim vi tri co ',' lan 6
+		//printf("%d\n",Temp2);
+		k = 0;
+		for(i = Temp1+1 ; i < Temp2; i++){
+			longitude[k] = GPS_RX_Buffer[i];
+			k++;	
+		}
+                longitude[i] = 0;
+	        b = atof(longitude);
+	return 1;	
+	}
+}
+
 
 
 
@@ -133,7 +152,8 @@ int GPS_GetGPRMC()
 void main (void) 
 { 
 //cau hinh xung nhip
-WDTCTL = WDTPW + WDTHOLD;  //Stop Watchdog Timer 
+
+  WDTCTL = WDTPW + WDTHOLD;  //Stop Watchdog Timer 
 BCSCTL1 = CALBC1_1MHZ;
 DCOCTL = CALDCO_1MHZ; //chon thach anh dao dong noi la 1MHZ
  //cau hinh IO
@@ -144,41 +164,38 @@ Init_uart();        //khoi tao uart
 LCD5110_Clr();      //xoa man hinh lcd
 LCD5110_GotoXY(0,0);
 LCD5110_String("Thuong dep trai");
-__delay_cycles(10000000);
+__delay_cycles(1000000);
 while(1){
-  for(int i=0; i< GPS_BUFFER_SIZE-1; i++){
+  for(int i = 0; i< GPS_BUFFER_SIZE; i++){
   	GPS_RX_Buffer[i] = serialRead();
   }
-  GPS_ans_stt = GPS_DeviceInfo(latitude, status, latitude, S_N,longitude, E_W, speed, dir, date);
+ GPS_ans_stt = GPS_DeviceInfo(time, status, latitude, S_N, longitude, E_W, speed, dir, date);
     if(GPS_ans_stt){
-        __delay_cycles(1000);
+        __delay_cycles(10000);
         LCD5110_Clr();
         LCD5110_GotoXY(0,0);
-        LCD5110_String("Kinh do:");
+        LCD5110_String("Vi do:");
         LCD5110_GotoXY(0,1);
         LCD5110_String(latitude);
         LCD5110_GotoXY(0,2);
-        LCD5110_String("Vi do:");
+        LCD5110_String("Kinh do:");
         LCD5110_GotoXY(0,3);
         LCD5110_String(longitude);
+        P1OUT ^= BIT6;
+         CLEAR_GPS_RX_Buffer();
     }
-  CLEAR_GPS_RX_Buffer();
-  
+    else{
+     // __delay_cycles(1000);
+        LCD5110_Clr();
+        LCD5110_GotoXY(0,0);
+        LCD5110_String("Dang do.");
+        __delay_cycles(1000);
+        LCD5110_Clr();
+        LCD5110_String("Dang do..");
+        __delay_cycles(1000);
+        LCD5110_Clr();
+        LCD5110_String("Dang do..."); 
+        
+    }
   }
 }
-/*
-unsigned char GPS_Receive (){
-  for(int i = 0; i < SIZE_DATA_BUFFER; i++){
-       GPS_RX_Buffer[i] = serialRead();
-  } 
-}
-
- for (int j = 0; j< = SIZE_DATA_BUFFER; j++){
-    if(GPS_RX_Buffer[j]=='M' && GPS_RX_Buffer[j+1]=='C'){
-          j = j - 4;
-          return j;
-          break;
-    }
-    
-  } 
-*/
